@@ -8,7 +8,7 @@ public class CollectionModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(CollectionController.class);
-        bind(CollectionLocator.class);
+        bind(CollectionService.class);
         Multibinder.newSetBinder(binder(), Routing.class).addBinding().to(CollectionRouting.class);
     }
 }
