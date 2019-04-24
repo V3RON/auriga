@@ -18,7 +18,8 @@ public class AppModule extends AbstractModule {
     @NotNull
     public static AppModule create() {
         Javalin app = Javalin.create()
-                .defaultContentType("application/json");
+                .defaultContentType("application/json")
+                .disableStartupBanner();
 
         return new AppModule(app);
     }
