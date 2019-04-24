@@ -21,8 +21,16 @@ public class Startup {
     }
 
     public void boot(String[] args) {
+        System.out.println(
+                "\u001b[32m\n    _           _           \n" +
+                        "   /_\\ _  _ _ _(_)__ _ __ _ \n" +
+                        "  / _ \\ || | '_| / _` / _` |\n" +
+                        " /_/ \\_\\_,_|_| |_\\__, \\__,_|\n" +
+                        "                 |___/      \n\u001b[0m"
+        );
+
         bindRoutes();
-        app.port(7000);
+        app.port(8000);
         app.start();
     }
 
