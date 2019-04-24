@@ -28,8 +28,9 @@ public class NodesController implements CrudHandler {
     public void create(@NotNull Context context) {
         try {
             NodeRegistration registration = objectMapper.readValue(context.body(), NodeRegistration.class);
+            //registration.setAddress(context.ip());
             nodesService.registerNode(registration);
-            context.status(200);
+            context.status(201);
         } catch (IOException e) {
             context.status(400);
         } catch (NodeAlreadyRegisteredException e) {
@@ -41,9 +42,9 @@ public class NodesController implements CrudHandler {
     public void delete(@NotNull Context context, @NotNull String nodeName) {
         try {
             nodesService.forgetNode(nodeName);
-            context.status(200);
+            context.status(204);
         } catch (UnknownNodeException e) {
-            context.status(400);
+            context.status(404);
         }
     }
 
@@ -76,7 +77,7 @@ public class NodesController implements CrudHandler {
             }
 
             nodesService.updateNode(registration);
-            context.status(200);
+            context.status(204);
         } catch (IOException e) {
             context.status(400);
         } catch (UnknownNodeException e) {

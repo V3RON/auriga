@@ -6,6 +6,7 @@ import com.google.inject.Singleton;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pl.aitwar.auriga.nodes.model.Node;
 import pl.aitwar.auriga.nodes.model.NodeRegistration;
 import pl.aitwar.auriga.nodes.model.NodeUsageMetric;
 import pl.aitwar.auriga.nodes.model.exceptions.NoFreeNodeException;
@@ -27,7 +28,7 @@ import java.util.stream.Collectors;
 @Singleton
 public class NodesService {
     private static final Logger logger = LoggerFactory.getLogger(NodesService.class);
-    private final Map<String, String> nodeAddresses = new HashMap<>();
+    private final Map<String, Node> nodeAddresses = new HashMap<>();
     private final ObjectMapper objectMapper;
     private final EventBus eventBus;
 
@@ -39,12 +40,12 @@ public class NodesService {
         setUp();
     }
 
-    public Set<String> getNodes() {
-        return this.nodeAddresses.keySet();
+    public Collection<Node> getNodes() {
+        return this.nodeAddresses.values();
     }
 
     @NotNull
-    public String getNodeAddress(String nodeName) {
+    public Node getNode(String nodeName) {
         return nodeAddresses.get(nodeName);
     }
 
@@ -52,7 +53,7 @@ public class NodesService {
     public CompletableFuture<NodeUsageMetric> getNodeUsage(final String name) {
         logger.info("Getting usage metric of '{}' node", name);
         Objects.requireNonNull(name);
-        String address = nodeAddresses.get(name);
+        String address = nodeAddresses.get(name).getAddress();
 
         if (address == null) {
             return CompletableFuture.failedFuture(new UnknownNodeException(name));
@@ -62,14 +63,16 @@ public class NodesService {
                 .build();
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(address + "/status"))
+                .uri(URI.create("http://" + address + ":7000/status"))
                 .build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(HttpResponse::body)
                 .thenApply(body -> {
                     try {
-                        return objectMapper.readValue(body, NodeUsageMetric.class);
+                        NodeUsageMetric metric = objectMapper.readValue(body, NodeUsageMetric.class);
+                        metric.setAddress(address);
+                        return metric;
                     } catch (IOException e) {
                         throw new CompletionException(e.getCause());
                     }
@@ -92,7 +95,7 @@ public class NodesService {
             throw new NodeAlreadyRegisteredException(name);
         }
 
-        nodeAddresses.put(name, address);
+        nodeAddresses.put(name, new Node(name, address));
         eventBus.publish(Event.NODE_ADD, name);
     }
 
@@ -109,7 +112,7 @@ public class NodesService {
             throw new UnknownNodeException(name);
         }
 
-        nodeAddresses.put(name, address);
+        nodeAddresses.put(name, new Node(name, address));
     }
 
     @NotNull
@@ -123,7 +126,10 @@ public class NodesService {
                 .filter(NodeUsageMetric::isEmpty)
                 .min(Comparator.comparingDouble(NodeUsageMetric::getLoad))
                 .map(CompletableFuture::completedFuture)
-                .orElseGet(() -> CompletableFuture.failedFuture(new NoFreeNodeException()));
+                .orElseGet(() -> {
+                    logger.warn("No free nodes found");
+                    return CompletableFuture.failedFuture(new NoFreeNodeException());
+                });
     }
 
     public void forgetNode(final String name) throws UnknownNodeException {
@@ -139,40 +145,38 @@ public class NodesService {
     }
 
     @NotNull
-    public CompletableFuture<Void> checkNodes() {
+    public void checkNodes() {
         logger.info("Checking nodes status");
 
-        return CompletableFuture.runAsync(() -> {
-            Set<String> livingOnes = nodeAddresses.keySet()
-                    .stream()
-                    .map(address -> {
-                        try {
-                            return getNodeUsage(address).get();
-                        } catch (Exception ex) {
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .map(NodeUsageMetric::getName)
-                    .collect(Collectors.toSet());
+        Set<String> livingOnes = nodeAddresses.keySet()
+                .stream()
+                .map(address -> {
+                    try {
+                        return getNodeUsage(address).get();
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .map(NodeUsageMetric::getName)
+                .collect(Collectors.toSet());
 
-            logger.info("{} nodes found dead", nodeAddresses.size() - livingOnes.size());
+        logger.info("{} nodes found dead", nodeAddresses.size() - livingOnes.size());
 
-            nodeAddresses.keySet()
-                    .stream()
-                    .filter(Predicate.not(livingOnes::contains))
-                    .forEach(nodeName -> {
-                        try {
-                            forgetNode(nodeName);
-                        } catch (UnknownNodeException e) {
-                            // Eat it!
-                        }
-                    });
-        });
+        nodeAddresses.keySet()
+                .stream()
+                .filter(Predicate.not(livingOnes::contains))
+                .forEach(nodeName -> {
+                    try {
+                        forgetNode(nodeName);
+                    } catch (UnknownNodeException e) {
+                        // Eat it!
+                    }
+                });
     }
 
     private void setUp() {
         ScheduledExecutorService ex = Executors.newSingleThreadScheduledExecutor();
-        ex.scheduleAtFixedRate(this::checkNodes, 0, 60, TimeUnit.SECONDS);
+        ex.scheduleAtFixedRate(this::checkNodes, 60, 60, TimeUnit.SECONDS);
     }
 }
