@@ -166,6 +166,55 @@ public class CollectionService {
                 });
     }
 
+    @NotNull
+    public CompletableFuture<Void> deleteCollection(final String collectionName) {
+        logger.info("Deleting collection '{}'", collectionName);
+        Objects.requireNonNull(collectionName);
+
+        if (!collectionDescriptors.containsKey(collectionName)) {
+            logger.warn("Collection '{}' not found", collectionName);
+        }
+
+        Set<Node> containingNodes = collectionDescriptors.get(collectionName).getContainingNodesNames()
+                .stream()
+                .map(nodesService::getNode)
+                .collect(Collectors.toSet());
+
+        final CompletableFuture[] nodesFutures = containingNodes
+                .stream()
+                .map(node -> deleteCollectionFromNode(collectionName, node))
+                .toArray(CompletableFuture[]::new);
+
+        return CompletableFuture.allOf(nodesFutures)
+                .thenAccept(future -> Arrays.stream(nodesFutures).forEach(CompletableFuture<String>::join))
+                .thenAccept(nothing -> collectionDescriptors.remove(collectionName));
+    }
+
+    @NotNull
+    private CompletableFuture<Void> deleteCollectionFromNode(final String collectionName, final Node node) {
+        logger.info("Deleting collection '{}' from node '{}'", collectionName, node.getName());
+        Objects.requireNonNull(collectionName);
+        Objects.requireNonNull(node);
+
+        if (!collectionDescriptors.containsKey(collectionName)) {
+            logger.warn("Collection '{}' not found", collectionName);
+        }
+
+        final String address = node.getAddress();
+
+        HttpClient client = HttpClient.newBuilder()
+                .build();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + address + ":7000/collections/" + collectionName))
+                .DELETE()
+                .build();
+
+        // TODO: Check for failures
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenAccept(req -> {
+        });
+    }
+
     private void setUp() {
         eventBus.listen(Event.NODE_REM, payload -> {
             String nodeName = (String) payload;
