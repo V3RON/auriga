@@ -1,6 +1,5 @@
 package pl.aitwar.auriga.nodes;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
@@ -16,8 +15,6 @@ import pl.aitwar.auriga.nodes.model.exceptions.UnknownNodeException;
 import pl.aitwar.auriga.utils.eventbus.Event;
 import pl.aitwar.auriga.utils.eventbus.EventBus;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,7 +28,7 @@ import java.util.stream.Collectors;
 @Singleton
 public class NodesService {
     private static final Logger logger = LoggerFactory.getLogger(NodesService.class);
-    private Map<String, Node> nodeAddresses = new HashMap<>();
+    private final Map<String, Node> nodeAddresses = new HashMap<>();
     private final ObjectMapper objectMapper;
     private final EventBus eventBus;
 
@@ -66,7 +63,7 @@ public class NodesService {
                 .build();
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://" + address + "/status"))
+                .uri(URI.create("http://" + address + ":7000/status"))
                 .build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
@@ -189,33 +186,8 @@ public class NodesService {
                 });
     }
 
-    private void loadNodeDatabase() {
-        logger.info("Reading node database from 'nodes.json' file");
-        try {
-            nodeAddresses = objectMapper.readValue(new File("nodes.json"), new TypeReference<Map<String, Node>>() {
-            });
-        } catch (IOException e) {
-            logger.error("Failed to read node database");
-        }
-    }
-
-    private void saveNodeDatabase() {
-        logger.info("Saving node database to 'nodes.json' file");
-        try {
-            FileWriter fileWriter = new FileWriter("nodes.json");
-            String fileBody = objectMapper.writeValueAsString(nodeAddresses);
-            fileWriter.write(fileBody);
-            fileWriter.close();
-        } catch (Exception e) {
-            logger.error("Failed to save node database");
-        }
-    }
-
     private void setUp() {
         ScheduledExecutorService ex = Executors.newSingleThreadScheduledExecutor();
         ex.scheduleAtFixedRate(this::checkNodes, 60, 60, TimeUnit.SECONDS);
-        ex.scheduleAtFixedRate(this::saveNodeDatabase, 20, 20, TimeUnit.SECONDS);
-
-        loadNodeDatabase();
     }
 }
