@@ -116,11 +116,22 @@ public class NodesService {
     }
 
     @NotNull
-    public CompletableFuture<NodeUsageMetric> getFreeNode() {
-        logger.info("Searching for empty node");
+    public CompletableFuture<NodeUsageMetric> getFreeNode(final Set<String> blacklist) {
+        if (blacklist != null) {
+            logger.info("Searching for empty node with blacklist provided");
+        } else {
+            logger.info("Searching for empty node");
+        }
 
         return nodeAddresses.keySet()
                 .stream()
+                .filter(nodeName -> {
+                    if (blacklist == null) {
+                        return true;
+                    } else {
+                        return !blacklist.contains(nodeName);
+                    }
+                })
                 .map(this::getNodeUsage)
                 .map(CompletableFuture::join)
                 .filter(NodeUsageMetric::isEmpty)
