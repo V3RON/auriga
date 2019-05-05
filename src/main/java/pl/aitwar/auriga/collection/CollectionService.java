@@ -1,6 +1,5 @@
 package pl.aitwar.auriga.collection;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
@@ -8,10 +7,8 @@ import com.google.inject.Singleton;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import pl.aitwar.auriga.collection.model.CollectionCopyRequest;
 import pl.aitwar.auriga.collection.model.CollectionDescriptor;
 import pl.aitwar.auriga.collection.model.exceptions.CollectionAlreadyExistsException;
-import pl.aitwar.auriga.collection.model.exceptions.CollectionBlockedException;
 import pl.aitwar.auriga.collection.model.exceptions.DocumentAllocationException;
 import pl.aitwar.auriga.collection.model.exceptions.UnknownCollectionException;
 import pl.aitwar.auriga.nodes.NodesService;
