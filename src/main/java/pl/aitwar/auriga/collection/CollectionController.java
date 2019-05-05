@@ -47,7 +47,19 @@ public class CollectionController {
                 });
     }
 
-    public void delete(@NotNull Context context, @NotNull String s) {
+    public void delete(@NotNull Context context, @NotNull String collectionName) {
+        final String body = context.body();
+
+        context.status(200);
+        if (body.isBlank()) {
+            try {
+                collectionService.deleteCollection(collectionName).get();
+            } catch (Exception ex) {
+                context.status(400);
+            }
+            return;
+        }
+
         throw new UnsupportedOperationException("Not implemented yet!");
     }
 
