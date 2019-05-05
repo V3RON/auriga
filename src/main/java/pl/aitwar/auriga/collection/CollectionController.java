@@ -8,6 +8,7 @@ import io.javalin.Context;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pl.aitwar.auriga.collection.model.exceptions.CollectionBlockedException;
 import pl.aitwar.auriga.collection.model.exceptions.UnknownCollectionException;
 import pl.aitwar.auriga.nodes.model.exceptions.NoFreeNodeException;
 
@@ -38,7 +39,19 @@ public class CollectionController {
 
         context.status(201);
 
-        collectionService.putDocument(collectionName, context.body())
+        String replicationLevelParam = context.queryParam("replication");
+        Integer replicationLevel = 1;
+
+        if (replicationLevelParam != null) {
+            try {
+                replicationLevel = Integer.valueOf(replicationLevelParam);
+            } catch (Exception e) {
+                context.status(400);
+                return;
+            }
+        }
+
+        collectionService.putDocument(collectionName, context.body(), replicationLevel)
                 .exceptionally(ex -> {
                     if (ex.getCause() instanceof NoFreeNodeException) {
                         context.status(503);
@@ -81,6 +94,9 @@ public class CollectionController {
                     .exceptionally(exp -> {
                         if (exp.getCause() instanceof UnknownCollectionException) {
                             context.status(404);
+                        } else if (exp.getCause() instanceof CollectionBlockedException) {
+                            logger.warn("Collection '{}' is being fetched at the moment", collectionName);
+                            context.status(503);
                         } else {
                             context.status(500);
                         }
