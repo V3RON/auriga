@@ -1,12 +1,17 @@
 package pl.aitwar.auriga.collection;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pl.aitwar.auriga.collection.model.CollectionCopyRequest;
 import pl.aitwar.auriga.collection.model.CollectionDescriptor;
 import pl.aitwar.auriga.collection.model.exceptions.CollectionAlreadyExistsException;
+import pl.aitwar.auriga.collection.model.exceptions.CollectionBlockedException;
 import pl.aitwar.auriga.collection.model.exceptions.DocumentAllocationException;
 import pl.aitwar.auriga.collection.model.exceptions.UnknownCollectionException;
 import pl.aitwar.auriga.nodes.NodesService;
@@ -15,12 +20,18 @@ import pl.aitwar.auriga.nodes.model.NodeUsageMetric;
 import pl.aitwar.auriga.utils.eventbus.Event;
 import pl.aitwar.auriga.utils.eventbus.EventBus;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Singleton
@@ -28,12 +39,14 @@ public class CollectionService {
     private static final Logger logger = LoggerFactory.getLogger(NodesService.class);
     private final NodesService nodesService;
     private final EventBus eventBus;
+    private final ObjectMapper objectMapper;
     private Map<String, CollectionDescriptor> collectionDescriptors = new HashMap<>();
 
     @Inject
-    public CollectionService(NodesService nodesService, EventBus eventBus) {
+    public CollectionService(NodesService nodesService, EventBus eventBus, ObjectMapper objectMapper) {
         this.nodesService = nodesService;
         this.eventBus = eventBus;
+        this.objectMapper = objectMapper;
 
         setUp();
     }
@@ -215,6 +228,28 @@ public class CollectionService {
         });
     }
 
+    private void loadCollectionDatabase() {
+        logger.info("Reading collection database from 'collections.json' file");
+        try {
+            collectionDescriptors = objectMapper.readValue(new File("collections.json"), new TypeReference<Map<String, CollectionDescriptor>>() {
+            });
+        } catch (IOException e) {
+            logger.error("Failed to read collection database");
+        }
+    }
+
+    private void saveCollectionDatabase() {
+        logger.info("Saving collection database to 'collections.json' file");
+        try {
+            FileWriter fileWriter = new FileWriter("collections.json");
+            String fileBody = objectMapper.writeValueAsString(collectionDescriptors);
+            fileWriter.write(fileBody);
+            fileWriter.close();
+        } catch (Exception e) {
+            logger.error("Failed to save collection database");
+        }
+    }
+
     private void setUp() {
         eventBus.listen(Event.NODE_REM, payload -> {
             String nodeName = (String) payload;
@@ -222,8 +257,15 @@ public class CollectionService {
             collectionDescriptors.values().forEach(descriptor -> {
                 if (descriptor.removeNode(nodeName)) {
                     descriptor.setCurrentReplicationLevel(descriptor.getCurrentReplicationLevel() - 1);
+                    logger.info("Collection '{}' current replication level dropped to '{}'", descriptor.getName(),
+                            descriptor.getCurrentReplicationLevel());
                 }
             });
         });
+
+        loadCollectionDatabase();
+
+        ScheduledExecutorService ex = Executors.newSingleThreadScheduledExecutor();
+        ex.scheduleAtFixedRate(this::saveCollectionDatabase, 20, 20, TimeUnit.SECONDS);
     }
 }
